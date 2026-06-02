@@ -1,0 +1,6 @@
+{
+  "name": "Dora Library",
+  "description": "A modern, premium tech hub, trends magazine, and AI directory.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
