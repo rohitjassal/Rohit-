@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,10 +35,28 @@ fun AuthScreen(
     var isSignUp by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("rohitjassal1929@gmail.com") }
     var nickname by remember { mutableStateOf("Rohit Jassal") }
-    var password by remember { mutableStateOf("••••••••") }
+    var password by remember { mutableStateOf("") }
 
     var errorMessage by remember { mutableStateOf("") }
-    var isSimulatingLogin by remember { mutableStateOf(false) }
+
+    val authLoading by viewModel.authLoading.collectAsState()
+    val authSuccess by viewModel.authSuccess.collectAsState()
+    val authStateMessage by viewModel.authStateMessage.collectAsState()
+
+    // Sync state feedback messages with local view state message
+    LaunchedEffect(authStateMessage) {
+        authStateMessage?.let {
+            errorMessage = it
+        }
+    }
+
+    // Reset status on screen entry/exit
+    DisposableEffect(Unit) {
+        viewModel.clearAuthStatus()
+        onDispose {
+            viewModel.clearAuthStatus()
+        }
+    }
 
     Box(
         modifier = modifier
@@ -103,7 +122,10 @@ fun AuthScreen(
                     if (errorMessage.isNotEmpty()) {
                         Text(
                             text = errorMessage,
-                            color = MaterialTheme.colorScheme.error,
+                            color = if (errorMessage.contains("successfully") || errorMessage.contains("sent"))
+                                Color(0xFF4CAF50)
+                            else
+                                MaterialTheme.colorScheme.error,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(bottom = 12.dp)
@@ -163,8 +185,12 @@ fun AuthScreen(
                     // Password Input
                     OutlinedTextField(
                         value = password,
-                        onValueChange = { password = it },
+                        onValueChange = { 
+                            password = it 
+                            errorMessage = ""
+                        },
                         label = { Text("Password") },
+                        visualTransformation = PasswordVisualTransformation(),
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Lock,
@@ -175,30 +201,66 @@ fun AuthScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 16.dp)
+                            .padding(bottom = 8.dp)
                     )
 
-                    // Get started button below
+                    // Forgot Password link for logged-out emails
+                    if (!isSignUp) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            contentAlignment = Alignment.CenterEnd
+                        ) {
+                            Text(
+                                text = "Forgot password?",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clickable {
+                                        if (email.isBlank()) {
+                                            errorMessage = "Please type your email address above first."
+                                        } else {
+                                            viewModel.sendPasswordResetEmail(email)
+                                        }
+                                    }
+                                    .testTag("forgot_password_btn")
+                            )
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // Get started / Continue button below
                     Button(
                         onClick = {
-                            if (email.isBlank() || (isSignUp && nickname.isBlank())) {
-                                errorMessage = "Please enter all details."
+                            if (email.isBlank() || password.isBlank() || (isSignUp && nickname.isBlank())) {
+                                errorMessage = "Please fill in all requested fields."
                                 return@Button
                             }
-                            isSimulatingLogin = true
+                            if (password.length < 6) {
+                                errorMessage = "Password must be at least 6 characters."
+                                return@Button
+                            }
                             errorMessage = ""
-                            viewModel.loginWithEmail(email, if (isSignUp) nickname else email.substringBefore("@"))
+                            if (isSignUp) {
+                                viewModel.signUpWithEmailAndPassword(email, nickname, password)
+                            } else {
+                                viewModel.loginWithEmailAndPassword(email, password)
+                            }
                         },
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         ),
+                        enabled = !authLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
                             .testTag("login_btn")
                     ) {
-                        if (isSimulatingLogin) {
+                        if (authLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 color = MaterialTheme.colorScheme.onPrimary,
@@ -238,11 +300,10 @@ fun AuthScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Simulated Google Sign In Button
+                    // Simulated/Mocked Google Sign In Button - fully synced programmatically with DB Node
                     OutlinedButton(
                         onClick = {
-                            isSimulatingLogin = true
-                            // Fully configured with the verified User Context
+                            errorMessage = ""
                             viewModel.loginWithGoogle(
                                 email = "rohitjassal1929@gmail.com",
                                 name = "Rohit Jassal",
@@ -250,6 +311,7 @@ fun AuthScreen(
                             )
                         },
                         shape = RoundedCornerShape(14.dp),
+                        enabled = !authLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
@@ -264,7 +326,7 @@ fun AuthScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            // Perfect custom designed stylized Google logo
+                            // Stylized Google premium vector represent
                             Text(
                                 text = "G ",
                                 color = Color(0xFF4285F4),
@@ -303,6 +365,7 @@ fun AuthScreen(
                                 .clickable {
                                     isSignUp = !isSignUp
                                     errorMessage = ""
+                                    viewModel.clearAuthStatus()
                                 }
                                 .testTag("toggle_auth_mode")
                         )
