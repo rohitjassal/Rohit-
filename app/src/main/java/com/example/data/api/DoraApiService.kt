@@ -8,8 +8,8 @@ import retrofit2.http.Headers
 import retrofit2.http.Path
 
 interface DoraApiService {
-    @GET("NewsAPI/top-headlines/category/technology/in.json")
-    suspend fun getTechnologyNews(): NewsResponse
+    @GET("NewsAPI/top-headlines/category/technology/{country}.json")
+    suspend fun getTechnologyNews(@Path("country") country: String): NewsResponse
 
     @GET("https://hn.algolia.com/api/v1/search?query=trending")
     suspend fun getTrendingItems(): AlgoliaResponse
@@ -86,5 +86,22 @@ interface DoraApiService {
     // 14. Currency Hub
     @GET("https://open.er-api.com/v6/latest/USD")
     suspend fun getCurrencies(): ExchangeRateResponse
+
+    // --- CLIPS HUD INTEGRATED SERVICES ---
+    @GET("https://api.pexels.com/v1/videos/search")
+    suspend fun searchPexelsVideos(
+        @retrofit2.http.Header("Authorization") apiKey: String,
+        @retrofit2.http.Query("query") query: String,
+        @retrofit2.http.Query("page") page: Int,
+        @retrofit2.http.Query("per_page") perPage: Int
+    ): com.example.data.model.PexelsVideoResponse
+
+    @GET("https://pixabay.com/api/videos/")
+    suspend fun searchPixabayVideos(
+        @retrofit2.http.Query("key") apiKey: String,
+        @retrofit2.http.Query("q") query: String,
+        @retrofit2.http.Query("page") page: Int,
+        @retrofit2.http.Query("per_page") perPage: Int
+    ): com.example.data.model.PixabayVideoResponse
 }
 

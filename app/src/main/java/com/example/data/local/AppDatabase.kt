@@ -5,9 +5,10 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [Bookmark::class], version = 1, exportSchema = false)
+@Database(entities = [Bookmark::class, SavedClip::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun bookmarkDao(): BookmarkDao
+    abstract fun savedClipDao(): SavedClipDao
 
     companion object {
         @Volatile

@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/dora_icon_fg_1780384782117"
+        android:drawable="@drawable/img_app_logo_1780587892693"
         android:gravity="center" />
 </layer-list>

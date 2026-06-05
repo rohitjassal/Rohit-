@@ -6,14 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -142,10 +136,10 @@ fun DoraNavigationWrapper(
                     )
 
                     NavigationBarItem(
-                        selected = currentRoute == "bookmarks",
+                        selected = currentRoute == "clips",
                         onClick = {
-                            if (currentRoute != "bookmarks") {
-                                navController.navigate("bookmarks") {
+                            if (currentRoute != "clips") {
+                                navController.navigate("clips") {
                                     popUpTo("home") { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
@@ -154,12 +148,12 @@ fun DoraNavigationWrapper(
                         },
                         icon = {
                             Icon(
-                                imageVector = if (currentRoute == "bookmarks") Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
-                                contentDescription = "Bookmarks"
+                                imageVector = if (currentRoute == "clips") Icons.Default.VideoLibrary else Icons.Outlined.VideoLibrary,
+                                contentDescription = "Clips"
                             )
                         },
-                        label = { Text("Bookmarks") },
-                        modifier = Modifier.testTag("nav_btn_bookmarks")
+                        label = { Text("Clips") },
+                        modifier = Modifier.testTag("nav_btn_clips")
                     )
 
                     NavigationBarItem(
@@ -203,8 +197,8 @@ fun DoraNavigationWrapper(
                 composable("reels") {
                     ReelsScreen(viewModel = viewModel)
                 }
-                composable("bookmarks") {
-                    BookmarksScreen(viewModel = viewModel)
+                composable("clips") {
+                    ClipsScreen(viewModel = viewModel)
                 }
                 composable("profile") {
                     ProfileScreen(viewModel = viewModel)

@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -20,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.LogoConfig
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun SplashScreen(
@@ -27,32 +29,53 @@ fun SplashScreen(
     modifier: Modifier = Modifier
 ) {
     // Animation state variables
-    val scale = remember { Animatable(0.88f) }
+    val scale = remember { Animatable(0.85f) }
     val opacity = remember { Animatable(0f) }
     val glowProgress = remember { Animatable(0f) }
+    
+    // Staggered title slides
+    val titleOpacity = remember { Animatable(0f) }
+    val titleSlideY = remember { Animatable(40f) }
 
     // Start premium animation sequence
     LaunchedEffect(Unit) {
         // 1. Smooth fade-in
         opacity.animateTo(
             targetValue = 1f,
-            animationSpec = tween(1000, easing = FastOutSlowInEasing)
+            animationSpec = tween(900, easing = FastOutSlowInEasing)
         )
         // 2. Slow zoom-in physics
         scale.animateTo(
             targetValue = 1.05f,
-            animationSpec = tween(1200, easing = LinearOutSlowInEasing)
+            animationSpec = tween(1400, easing = LinearOutSlowInEasing)
         )
         // 3. Staggered subtle glow pulsing
         glowProgress.animateTo(
             targetValue = 1f,
-            animationSpec = tween(800, easing = FastOutSlowInEasing)
+            animationSpec = tween(1000, easing = FastOutSlowInEasing)
         )
+    }
+
+    // Stagger text entrance
+    LaunchedEffect(Unit) {
+        delay(400)
+        launch {
+            titleOpacity.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(800, easing = LinearOutSlowInEasing)
+            )
+        }
+        launch {
+            titleSlideY.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(900, easing = FastOutSlowInEasing)
+            )
+        }
     }
 
     // Timer to trigger navigation transition
     LaunchedEffect(Unit) {
-        delay(2500) // Duration: ~2.5 seconds
+        delay(2600) // Duration: ~2.6 seconds
         // Outro quick fade-out
         opacity.animateTo(
             targetValue = 0f,
@@ -78,8 +101,8 @@ fun SplashScreen(
         // Glowing Ambient Light Ring in the center background
         Box(
             modifier = Modifier
-                .size(260.dp * scale.value)
-                .alpha(opacity.value * 0.12f * (1f - glowProgress.value * 0.3f))
+                .size(280.dp * scale.value)
+                .alpha(opacity.value * 0.15f * (1f - glowProgress.value * 0.3f))
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
@@ -99,16 +122,65 @@ fun SplashScreen(
                 .alpha(opacity.value)
                 .scale(scale.value)
         ) {
-            // High fidelity logo wordmark
-            LogoConfig.DoraWordmarkLogo(
-                iconSize = 100.dp,
-                textSize = 50.sp,
-                subtitleSize = 15.sp,
-                isCentered = true,
-                textColor = Color.White
+            // High fidelity custom logo
+            LogoConfig.DoraLogoIcon(size = 92.dp, cornerRadius = 20.dp)
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Premium animated custom wordmark
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .alpha(titleOpacity.value)
+                    .graphicsLayer {
+                        translationY = titleSlideY.value
+                    }
+            ) {
+                Text(
+                    text = "DO",
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 44.sp,
+                    color = Color.White,
+                    letterSpacing = 4.sp
+                )
+                Text(
+                    text = "R",
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 44.sp,
+                    color = Color.White,
+                    letterSpacing = 4.sp
+                )
+                Text(
+                    text = "Δ",
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 42.sp,
+                    color = Color.White,
+                    letterSpacing = 4.sp,
+                    modifier = Modifier.offset(y = (-2).dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "L I B R A R Y",
+                fontFamily = FontFamily.SansSerif,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = Color.White.copy(alpha = 0.65f),
+                letterSpacing = 3.sp,
+                modifier = Modifier
+                    .alpha(titleOpacity.value)
+                    .graphicsLayer {
+                        translationY = titleSlideY.value
+                    }
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Animated glowing tag line text below
             Text(
@@ -119,7 +191,7 @@ fun SplashScreen(
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f + (glowProgress.value * 0.2f)),
                 letterSpacing = 4.3.sp,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.alpha(if (opacity.value > 0.5f) 0.8f else 0f)
+                modifier = Modifier.alpha(if (titleOpacity.value > 0.5f) 0.8f else 0f)
             )
         }
     }

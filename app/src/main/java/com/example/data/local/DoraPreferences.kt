@@ -54,4 +54,84 @@ class DoraPreferences(context: Context) {
             apply()
         }
     }
+
+    // --- LOCATION PERSISTENCE ---
+    fun getSelectedCountryCode(): String {
+        return prefs.getString("selected_country_code", "US") ?: "US"
+    }
+
+    fun getSelectedCountryName(): String {
+        return prefs.getString("selected_country_name", "United States") ?: "United States"
+    }
+
+    fun getSelectedState(): String {
+        return prefs.getString("selected_state", "California") ?: "California"
+    }
+
+    fun getSelectedCity(): String {
+        return prefs.getString("selected_city", "San Francisco") ?: "San Francisco"
+    }
+
+    fun isUseCurrentLocationEnabled(): Boolean {
+        return prefs.getBoolean("use_current_location", true)
+    }
+
+    fun setLocationSelection(
+        countryCode: String,
+        countryName: String,
+        state: String,
+        city: String,
+        useCurrent: Boolean
+    ) {
+        prefs.edit().apply {
+            putString("selected_country_code", countryCode)
+            putString("selected_country_name", countryName)
+            putString("selected_state", state)
+            putString("selected_city", city)
+            putBoolean("use_current_location", useCurrent)
+            apply()
+        }
+    }
+
+    // --- DATE FILTER PERSISTENCE ---
+    fun getDateFilter(): String {
+        return prefs.getString("selected_date_filter", "ALL") ?: "ALL"
+    }
+
+    fun setDateFilter(filter: String) {
+        prefs.edit().putString("selected_date_filter", filter).apply()
+    }
+
+    fun getCustomDateRange(): Pair<Long?, Long?> {
+        val startVal = prefs.getLong("custom_date_start", -1L)
+        val endVal = prefs.getLong("custom_date_end", -1L)
+        val start = if (startVal != -1L) startVal else null
+        val end = if (endVal != -1L) endVal else null
+        return Pair(start, end)
+    }
+
+    fun setCustomDateRange(start: Long?, end: Long?) {
+        prefs.edit().apply {
+            putLong("custom_date_start", start ?: -1L)
+            putLong("custom_date_end", end ?: -1L)
+            apply()
+        }
+    }
+
+    // --- VIDEO API KEYS ---
+    fun getPexelsApiKey(): String {
+        return prefs.getString("pexels_api_key", "") ?: ""
+    }
+
+    fun setPexelsApiKey(key: String) {
+        prefs.edit().putString("pexels_api_key", key).apply()
+    }
+
+    fun getPixabayApiKey(): String {
+        return prefs.getString("pixabay_api_key", "") ?: ""
+    }
+
+    fun setPixabayApiKey(key: String) {
+        prefs.edit().putString("pixabay_api_key", key).apply()
+    }
 }

@@ -3,16 +3,19 @@ package com.example.data.repository
 import com.example.data.api.DoraApiService
 import com.example.data.local.Bookmark
 import com.example.data.local.BookmarkDao
+import com.example.data.local.SavedClip
+import com.example.data.local.SavedClipDao
 import com.example.data.model.AlgoliaResponse
 import com.example.data.model.NewsResponse
 import kotlinx.coroutines.flow.Flow
 
 class DoraRepository(
     private val apiService: DoraApiService,
-    private val bookmarkDao: BookmarkDao
+    private val bookmarkDao: BookmarkDao,
+    private val savedClipDao: SavedClipDao
 ) {
-    suspend fun getTechnologyNews(): NewsResponse {
-        return apiService.getTechnologyNews()
+    suspend fun getTechnologyNews(country: String): NewsResponse {
+        return apiService.getTechnologyNews(country)
     }
 
     suspend fun getTrendingItems(): AlgoliaResponse {
@@ -65,4 +68,30 @@ class DoraRepository(
     fun isBookmarked(id: String): Flow<Boolean> {
         return bookmarkDao.isBookmarked(id)
     }
+
+    // --- SavedClips Operations ---
+    val allSavedClips: Flow<List<SavedClip>> = savedClipDao.getAllSavedClips()
+
+    suspend fun insertSavedClip(clip: SavedClip) {
+        savedClipDao.insertSavedClip(clip)
+    }
+
+    suspend fun deleteSavedClipById(id: String) {
+        savedClipDao.deleteSavedClipById(id)
+    }
+
+    fun isClipSaved(id: String): Flow<Boolean> {
+        return savedClipDao.isSaved(id)
+    }
+
+    suspend fun updateClipDownloadStatus(id: String, downloaded: Boolean, filePath: String?) {
+        savedClipDao.updateDownloadStatus(id, downloaded, filePath)
+    }
+
+    // --- Dynamic APIs Callers ---
+    suspend fun searchPexelsVideos(apiKey: String, query: String, page: Int, perPage: Int) =
+        apiService.searchPexelsVideos(apiKey, query, page, perPage)
+
+    suspend fun searchPixabayVideos(apiKey: String, query: String, page: Int, perPage: Int) =
+        apiService.searchPixabayVideos(apiKey, query, page, perPage)
 }

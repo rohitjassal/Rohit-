@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -42,6 +44,7 @@ import com.example.ui.theme.DeepPurple
 import com.example.ui.theme.SoftPurple
 import com.example.ui.viewmodel.DoraViewModel
 import com.example.ui.viewmodel.HubState
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 data class HubInfo(
@@ -53,6 +56,13 @@ data class HubInfo(
     val category: String
 )
 
+data class CountryModel(
+    val code: String,
+    val name: String,
+    val states: List<String>,
+    val cities: Map<String, List<String>>
+)
+
 @OptIn(ExperimentalAnimationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -60,6 +70,9 @@ fun HomeScreen(
     onNavigateToSearch: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
     val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
@@ -89,6 +102,14 @@ fun HomeScreen(
 
     var openedHub by remember { mutableStateOf<HubInfo?>(null) }
     var activeCategoryFilter by remember { mutableStateOf("All") }
+
+    // Dialog state controllers for location & date-range overrides
+    var showLocationDialog by remember { mutableStateOf(false) }
+    var showDateDialog by remember { mutableStateOf(false) }
+
+    val currentCity by viewModel.currentCity.collectAsStateWithLifecycle()
+    val currentCountryName by viewModel.currentCountryName.collectAsStateWithLifecycle()
+    val currentDateFilter by viewModel.dateFilter.collectAsStateWithLifecycle()
     
     // Greeting based on time
     val greetingMessage = remember {
@@ -145,32 +166,140 @@ fun HomeScreen(
     // Filter categories
     val filterGroups = listOf("All", "Tech", "Media", "Data", "Social", "Creative", "Lifestyle")
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        // Main Grid Page Content Structure
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-        ) {
-            // Branding Sticky Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                modifier = Modifier.width(310.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                                    MaterialTheme.colorScheme.surface
+                                )
+                            )
+                        )
+                        .padding(vertical = 36.dp, horizontal = 24.dp)
                 ) {
-                    LogoConfig.DoraLogoIcon(
-                        size = 38.dp,
-                        cornerRadius = 10.dp
+                    LogoConfig.DoraWordmarkLogo(
+                        iconSize = 68.dp,
+                        textSize = 34.sp,
+                        subtitleSize = 13.sp,
+                        isCentered = false,
+                        textColor = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = MaterialTheme.colorScheme.primary) },
+                    label = { Text("Main Library Hubs", fontWeight = FontWeight.Bold) },
+                    selected = true,
+                    onClick = { scope.launch { drawerState.close() } },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp).testTag("drawer_home_nav")
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.MyLocation, contentDescription = "Location Settings", tint = MaterialTheme.colorScheme.primary) },
+                    label = { Text("Global Geo System", fontWeight = FontWeight.Bold) },
+                    selected = false,
+                    onClick = {
+                        scope.launch {
+                            drawerState.close()
+                            showLocationDialog = true
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp).testTag("drawer_location_nav")
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.DateRange, contentDescription = "Date Filters", tint = MaterialTheme.colorScheme.primary) },
+                    label = { Text("Chronological Filters", fontWeight = FontWeight.Bold) },
+                    selected = false,
+                    onClick = {
+                        scope.launch {
+                            drawerState.close()
+                            showDateDialog = true
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp).testTag("drawer_date_nav")
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "ACTIVE USER PREFERENCES",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        letterSpacing = 2.sp
+                    )
+                    Text(
+                        text = "📍 Local Zone: $currentCity, $currentCountryName",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "📅 Filter Selection: ${currentDateFilter.replace("_", " ")}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    ) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            // Main Grid Page Content Structure
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
+                // Branding Sticky Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(
+                            onClick = { scope.launch { drawerState.open() } },
+                            modifier = Modifier.testTag("drawer_menu_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "Open Drawer menu",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        LogoConfig.DoraLogoIcon(
+                            size = 38.dp,
+                            cornerRadius = 10.dp
+                        )
 
                     Column {
                         Text(
@@ -324,6 +453,37 @@ fun HomeScreen(
                 }
             }
 
+            // Dynamic Active Geo & Clock preference indicators
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AssistChip(
+                    onClick = { showLocationDialog = true },
+                    label = { Text("📍 $currentCity, $currentCountryName", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+                        labelColor = MaterialTheme.colorScheme.primary
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("home_location_indicator_chip")
+                )
+
+                AssistChip(
+                    onClick = { showDateDialog = true },
+                    label = { Text("📅 Filter: ${currentDateFilter.replace("_", " ")}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f),
+                        labelColor = MaterialTheme.colorScheme.secondary
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("home_date_indicator_chip")
+                )
+            }
+
             Text(
                 text = "Interactive Library Hubs",
                 fontWeight = FontWeight.Bold,
@@ -441,7 +601,22 @@ fun HomeScreen(
                 )
             }
         }
+
+        if (showLocationDialog) {
+            LocationSelectorDialog(
+                onDismiss = { showLocationDialog = false },
+                viewModel = viewModel
+            )
+        }
+
+        if (showDateDialog) {
+            DateFilterDialog(
+                onDismiss = { showDateDialog = false },
+                viewModel = viewModel
+            )
+        }
     }
+}
 }
 
 /**
@@ -602,6 +777,50 @@ fun HubDetailOverlayContainer(
                 )
             }
 
+            // Real-Time Sync Indicator, Active Location & Date Range Indicator Banner
+            val lastSyncedTimes by viewModel.lastUpdatedTimes.collectAsStateWithLifecycle()
+            val lastSyncTime = lastSyncedTimes[hub.id]
+            val lastSyncLabel = if (lastSyncTime != null) {
+                val diffSeconds = (System.currentTimeMillis() - lastSyncTime) / 1000
+                when {
+                    diffSeconds < 5 -> "Just updated"
+                    diffSeconds < 60 -> "$diffSeconds seconds ago"
+                    else -> "${diffSeconds / 60}m ago"
+                }
+            } else {
+                "Synced"
+            }
+
+            val currentCountryName by viewModel.currentCountryName.collectAsStateWithLifecycle()
+            val currentCityName by viewModel.currentCity.collectAsStateWithLifecycle()
+            val activeFilterName by viewModel.dateFilter.collectAsStateWithLifecycle()
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 6.dp)
+                    .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(modifier = Modifier.size(6.dp).background(Color.Green, CircleShape))
+                    Text(
+                        text = "Real-Time Sync: $lastSyncLabel",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+
+                Text(
+                    text = "📍 $currentCityName ($currentCountryName) • 📅 $activeFilterName",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                )
+            }
+
             Spacer(modifier = Modifier.height(6.dp))
 
             // Dynamic view selector based on state of current hub index
@@ -640,14 +859,111 @@ fun HubDetailOverlayContainer(
 
 // ==================== COMPONENT LIST RENDERING MODULES ====================
 
+fun isDateWithinFilter(
+    dateStr: String?,
+    timestamp: Long? = null,
+    activeFilter: String,
+    customStart: Long?,
+    customEnd: Long?
+): Boolean {
+    if (activeFilter == "ALL") return true
+    
+    // 1. Resolve target millis
+    val targetMillis: Long = when {
+        timestamp != null && timestamp > 0L -> timestamp
+        !dateStr.isNullOrEmpty() -> {
+            val formats = listOf(
+                "yyyy-MM-dd'T'HH:mm:ss'Z'",
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd",
+                "yyyy/MM/dd",
+                "yyyy-MM"
+            )
+            var resolvedTime: Long? = null
+            for (fmt in formats) {
+                try {
+                    val sdf = java.text.SimpleDateFormat(fmt, java.util.Locale.US)
+                    sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    resolvedTime = sdf.parse(dateStr)?.time
+                    if (resolvedTime != null) break
+                } catch (e: Exception) {
+                    // try next format
+                }
+            }
+            resolvedTime ?: return true // If unparseable, don't filter out to be safe
+        }
+        else -> return true // If no date info, keep it
+    }
+
+    // 2. Resolve bounds
+    val now = System.currentTimeMillis()
+    val calInstance = java.util.Calendar.getInstance()
+    calInstance.timeInMillis = now
+    
+    val todayStart = calInstance.apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    val todayEnd = todayStart + 24 * 60 * 60 * 1000L - 1
+
+    return when (activeFilter) {
+        "TODAY" -> targetMillis in todayStart..todayEnd
+        "YESTERDAY" -> {
+            val yesterdayStart = todayStart - 24 * 60 * 60 * 1000L
+            val yesterdayEnd = todayStart - 1
+            targetMillis in yesterdayStart..yesterdayEnd
+        }
+        "LAST_7_DAYS" -> {
+            val start = now - 7 * 24 * 60 * 60 * 1000L
+            targetMillis in start..now
+        }
+        "LAST_30_DAYS" -> {
+            val start = now - 30L * 24 * 60 * 60 * 1000L
+            targetMillis in start..now
+        }
+        "THIS_MONTH" -> {
+            calInstance.timeInMillis = now
+            val currentMonth = calInstance.get(java.util.Calendar.MONTH)
+            val currentYear = calInstance.get(java.util.Calendar.YEAR)
+            
+            val targetCal = java.util.Calendar.getInstance()
+            targetCal.timeInMillis = targetMillis
+            targetCal.get(java.util.Calendar.MONTH) == currentMonth && targetCal.get(java.util.Calendar.YEAR) == currentYear
+        }
+        "THIS_YEAR" -> {
+            calInstance.timeInMillis = now
+            val currentYear = calInstance.get(java.util.Calendar.YEAR)
+            
+            val targetCal = java.util.Calendar.getInstance()
+            targetCal.timeInMillis = targetMillis
+            targetCal.get(java.util.Calendar.YEAR) == currentYear
+        }
+        "CUSTOM" -> {
+            val start = customStart ?: 0L
+            val end = customEnd ?: Long.MAX_VALUE
+            targetMillis in start..end
+        }
+        else -> true
+    }
+}
+
 @Composable
 fun RenderNewsList(state: HubState<List<Article>>, query: String, bookmarks: List<com.example.data.local.Bookmark>, viewModel: DoraViewModel) {
+    val dateFilter by viewModel.dateFilter.collectAsStateWithLifecycle()
+    val customStart by viewModel.customDateStart.collectAsStateWithLifecycle()
+    val customEnd by viewModel.customDateEnd.collectAsStateWithLifecycle()
+
     when (state) {
         is HubState.Loading -> LoadingSkeletons()
         is HubState.Error -> ErrorView(state.message) { viewModel.refreshAll() }
         is HubState.Success -> {
-            val filtered = state.data.filter {
-                query.isEmpty() || it.title.contains(query, ignoreCase = true) || (it.description?.contains(query, ignoreCase = true) ?: false)
+            val filtered = state.data.filter { article ->
+                val matchesQuery = query.isEmpty() || article.title.contains(query, ignoreCase = true) || (article.description?.contains(query, ignoreCase = true) ?: false)
+                val matchesDate = isDateWithinFilter(article.publishedAt, null, dateFilter, customStart, customEnd)
+                matchesQuery && matchesDate
             }
             if (filtered.isEmpty()) EmptyResultsView()
             else {
@@ -676,12 +992,18 @@ fun RenderNewsList(state: HubState<List<Article>>, query: String, bookmarks: Lis
 
 @Composable
 fun RenderHNItemList(state: HubState<List<HNItem>>, type: String, query: String, bookmarks: List<com.example.data.local.Bookmark>, viewModel: DoraViewModel) {
+    val dateFilter by viewModel.dateFilter.collectAsStateWithLifecycle()
+    val customStart by viewModel.customDateStart.collectAsStateWithLifecycle()
+    val customEnd by viewModel.customDateEnd.collectAsStateWithLifecycle()
+
     when (state) {
         is HubState.Loading -> LoadingSkeletons()
         is HubState.Error -> ErrorView(state.message) { viewModel.refreshAll() }
         is HubState.Success -> {
-            val filtered = state.data.filter {
-                query.isEmpty() || (it.title?.contains(query, ignoreCase = true) ?: false)
+            val filtered = state.data.filter { item ->
+                val matchesQuery = query.isEmpty() || (item.title?.contains(query, ignoreCase = true) ?: false)
+                val matchesDate = isDateWithinFilter(item.created_at, null, dateFilter, customStart, customEnd)
+                matchesQuery && matchesDate
             }
             if (filtered.isEmpty()) EmptyResultsView()
             else {
@@ -711,12 +1033,18 @@ fun RenderHNItemList(state: HubState<List<HNItem>>, type: String, query: String,
 
 @Composable
 fun RenderJobsList(state: HubState<List<RemoteJob>>, query: String, bookmarks: List<com.example.data.local.Bookmark>, viewModel: DoraViewModel) {
+    val dateFilter by viewModel.dateFilter.collectAsStateWithLifecycle()
+    val customStart by viewModel.customDateStart.collectAsStateWithLifecycle()
+    val customEnd by viewModel.customDateEnd.collectAsStateWithLifecycle()
+
     when (state) {
         is HubState.Loading -> LoadingSkeletons()
         is HubState.Error -> ErrorView(state.message) { viewModel.refreshAll() }
         is HubState.Success -> {
-            val filtered = state.data.filter {
-                query.isEmpty() || it.title.contains(query, ignoreCase = true) || it.company.contains(query, ignoreCase = true)
+            val filtered = state.data.filter { job ->
+                val matchesQuery = query.isEmpty() || job.title.contains(query, ignoreCase = true) || job.company.contains(query, ignoreCase = true)
+                val matchesDate = isDateWithinFilter(null, job.timestamp, dateFilter, customStart, customEnd)
+                matchesQuery && matchesDate
             }
             if (filtered.isEmpty()) EmptyResultsView()
             else {
@@ -777,12 +1105,18 @@ fun RenderReelsList(state: HubState<List<ReelItem>>, query: String, bookmarks: L
 
 @Composable
 fun RenderEventsList(state: HubState<List<PredictHqEvent>>, query: String, bookmarks: List<com.example.data.local.Bookmark>, viewModel: DoraViewModel) {
+    val dateFilter by viewModel.dateFilter.collectAsStateWithLifecycle()
+    val customStart by viewModel.customDateStart.collectAsStateWithLifecycle()
+    val customEnd by viewModel.customDateEnd.collectAsStateWithLifecycle()
+
     when (state) {
         is HubState.Loading -> LoadingSkeletons()
         is HubState.Error -> ErrorView(state.message) { viewModel.refreshAll() }
         is HubState.Success -> {
-            val filtered = state.data.filter {
-                query.isEmpty() || it.title.contains(query, ignoreCase = true) || (it.description?.contains(query, ignoreCase = true) ?: false)
+            val filtered = state.data.filter { item ->
+                val matchesQuery = query.isEmpty() || item.title.contains(query, ignoreCase = true) || (item.description?.contains(query, ignoreCase = true) ?: false)
+                val matchesDate = isDateWithinFilter(item.start, null, dateFilter, customStart, customEnd)
+                matchesQuery && matchesDate
             }
             if (filtered.isEmpty()) EmptyResultsView()
             else {
@@ -1420,3 +1754,369 @@ fun ViewBrowserButton(url: String, text: String = "Read Article / Document") {
         Text(text = text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
+
+// ==================== GLOBAL LOCATION ENGINE & SELECTOR ====================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LocationSelectorDialog(
+    onDismiss: () -> Unit,
+    viewModel: DoraViewModel
+) {
+    val currentCountryName by viewModel.currentCountryName.collectAsStateWithLifecycle()
+    val currentStateVal by viewModel.currentState.collectAsStateWithLifecycle()
+    val currentCityName by viewModel.currentCity.collectAsStateWithLifecycle()
+    val useCurrent by viewModel.useCurrentLocation.collectAsStateWithLifecycle()
+
+    var detectLocState by remember { mutableStateOf(useCurrent) }
+    var selectedCountry by remember { mutableStateOf(currentCountryName) }
+    var selectedState by remember { mutableStateOf(currentStateVal) }
+    var selectedCity by remember { mutableStateOf(currentCityName) }
+
+    // static hierarchical database of countries, states, and cities
+    val countriesData: List<CountryModel> = remember {
+        listOf(
+            CountryModel("in", "India", listOf("Karnataka", "Delhi", "Maharashtra", "Tamil Nadu", "Telangana"), mapOf(
+                "Karnataka" to listOf("Bengaluru", "Mysore", "Hubli"),
+                "Delhi" to listOf("New Delhi", "Dwarka", "Rohini"),
+                "Maharashtra" to listOf("Mumbai", "Pune", "Nagpur"),
+                "Tamil Nadu" to listOf("Chennai", "Coimbatore", "Madurai"),
+                "Telangana" to listOf("Hyderabad", "Warangal", "Nizamabad")
+            )),
+            CountryModel("us", "United States", listOf("California", "New York", "Texas", "Washington", "Florida"), mapOf(
+                "California" to listOf("San Francisco", "Los Angeles", "San Diego"),
+                "New York" to listOf("New York City", "Buffalo", "Rochester"),
+                "Texas" to listOf("Houston", "Austin", "Dallas"),
+                "Washington" to listOf("Seattle", "Spokane", "Tacoma"),
+                "Florida" to listOf("Miami", "Orlando", "Tampa")
+            )),
+            CountryModel("gb", "United Kingdom", listOf("England", "Scotland", "Wales", "Northern Ireland"), mapOf(
+                "England" to listOf("London", "Manchester", "Birmingham"),
+                "Scotland" to listOf("Edinburgh", "Glasgow", "Aberdeen"),
+                "Wales" to listOf("Cardiff", "Swansea", "Newport"),
+                "Northern Ireland" to listOf("Belfast", "Derry", "Armagh")
+            )),
+            CountryModel("ca", "Canada", listOf("Ontario", "Quebec", "British Columbia", "Alberta"), mapOf(
+                "Ontario" to listOf("Toronto", "Ottawa", "Mississauga"),
+                "Quebec" to listOf("Montreal", "Quebec City", "Laval"),
+                "British Columbia" to listOf("Vancouver", "Victoria", "Burnaby"),
+                "Alberta" to listOf("Calgary", "Edmonton", "Red Deer")
+            )),
+            CountryModel("au", "Australia", listOf("New South Wales", "Victoria", "Queensland", "Western Australia"), mapOf(
+                "New South Wales" to listOf("Sydney", "Newcastle", "Wollongong"),
+                "Victoria" to listOf("Melbourne", "Geelong", "Ballarat"),
+                "Queensland" to listOf("Brisbane", "Gold Coast", "Cairns"),
+                "Western Australia" to listOf("Perth", "Fremantle", "Bunbury")
+            )),
+            CountryModel("de", "Germany", listOf("Bavaria", "Berlin", "Hamburg", "Saxony"), mapOf(
+                "Bavaria" to listOf("Munich", "Nuremberg", "Augsburg"),
+                "Berlin" to listOf("Berlin Center", "East Berlin", "Potsdam"),
+                "Hamburg" to listOf("Hamburg Altona", "Harburg", "Bergedorf"),
+                "Saxony" to listOf("Dresden", "Leipzig", "Chemnitz")
+            )),
+            CountryModel("fr", "France", listOf("Île-de-France", "Provence-Alpes", "Rhône-Alpes"), mapOf(
+                "Île-de-France" to listOf("Paris", "Boulogne", "Saint-Denis"),
+                "Provence-Alpes" to listOf("Marseille", "Nice", "Toulon"),
+                "Rhône-Alpes" to listOf("Lyon", "Grenoble", "Saint-Étienne")
+            )),
+            CountryModel("jp", "Japan", listOf("Tokyo", "Osaka", "Kyoto", "Hokkaido"), mapOf(
+                "Tokyo" to listOf("Shinjuku", "Shibuya", "Ginza"),
+                "Osaka" to listOf("Umeda", "Namba", "Tennōji"),
+                "Kyoto" to listOf("Shimogyo", "Nakagyo", "Kamigyo"),
+                "Hokkaido" to listOf("Sapporo", "Asahikawa", "Hakodate")
+            )),
+            CountryModel("sg", "Singapore", listOf("Central Region", "East Region", "North Region"), mapOf(
+                "Central Region" to listOf("Downtown Core", "Bukit Merah", "Queenstown"),
+                "East Region" to listOf("Tampines", "Bedok", "Pasir Ris"),
+                "North Region" to listOf("Woodlands", "Yishun", "Sembawang")
+            )),
+            CountryModel("ae", "UAE", listOf("Dubai", "Abu Dhabi", "Sharjah"), mapOf(
+                "Dubai" to listOf("Deira", "Dubai Marina", "Downtown Dubai"),
+                "Abu Dhabi" to listOf("Al Khalidiyah", "Yas Island", "Khalifa City"),
+                "Sharjah" to listOf("Al Majaz", "Al Nahda", "Muwaileh")
+            ))
+        )
+    }
+
+    val currentCountryObject: CountryModel = countriesData.find { it.name == selectedCountry } ?: countriesData[1]
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (detectLocState) {
+                        viewModel.autoDetectLocation()
+                    } else {
+                        val itemCode = currentCountryObject.code
+                        viewModel.updateLocation(itemCode, selectedCountry, selectedState, selectedCity, false)
+                    }
+                    onDismiss()
+                },
+                modifier = Modifier.testTag("apply_location_btn")
+            ) {
+                Text("Apply Location")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Dismiss")
+            }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.MyLocation, contentDescription = "Location Settings", tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Global Geo System", style = MaterialTheme.typography.titleLarge)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Provide coordinates or pick specific global regions to query location-aware events, trends, jobs, and news automatically.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { detectLocState = true }
+                        ) {
+                            RadioButton(selected = detectLocState, onClick = { detectLocState = true })
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Auto Detect Location", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("Matches local system timezone & preferences", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        
+                        HorizontalDivider()
+                        
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { detectLocState = false }
+                        ) {
+                            RadioButton(selected = !detectLocState, onClick = { detectLocState = false })
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Select Manually", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("Specify country, state/province, and city", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+
+                if (!detectLocState) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Country Selection", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            countriesData.forEach { country ->
+                                FilterChip(
+                                    selected = selectedCountry == country.name,
+                                    onClick = {
+                                        selectedCountry = country.name
+                                        selectedState = country.states.first()
+                                        selectedCity = country.cities[selectedState]?.first() ?: ""
+                                    },
+                                    label = { Text(country.name) }
+                                )
+                            }
+                        }
+
+                        Text("State/Province Selection", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            currentCountryObject.states.forEach { stateVal ->
+                                FilterChip(
+                                    selected = selectedState == stateVal,
+                                    onClick = {
+                                        selectedState = stateVal
+                                        selectedCity = currentCountryObject.cities[stateVal]?.first() ?: ""
+                                    },
+                                    label = { Text(stateVal) }
+                                )
+                            }
+                        }
+
+                        Text("City Selection", style = MaterialTheme.typography.labelMedium)
+                        val citiesList = currentCountryObject.cities[selectedState] ?: emptyList()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            citiesList.forEach { cityVal ->
+                                FilterChip(
+                                    selected = selectedCity == cityVal,
+                                    onClick = { selectedCity = cityVal },
+                                    label = { Text(cityVal) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+// ==================== CHRONOLOGY DATE RANGE SELECTOR ====================
+
+@Composable
+fun DateFilterDialog(
+    onDismiss: () -> Unit,
+    viewModel: DoraViewModel
+) {
+    val currentDateFilter by viewModel.dateFilter.collectAsStateWithLifecycle()
+    val customStart by viewModel.customDateStart.collectAsStateWithLifecycle()
+    val customEnd by viewModel.customDateEnd.collectAsStateWithLifecycle()
+
+    var selectedFilter by remember { mutableStateOf(currentDateFilter) }
+    var startDateText by remember { mutableStateOf(customStart?.let { formatDate(it) } ?: "") }
+    var endDateText by remember { mutableStateOf(customEnd?.let { formatDate(it) } ?: "") }
+    var validationError by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (selectedFilter == "CUSTOM") {
+                        val startLong = parseDateText(startDateText)
+                        val endLong = parseDateText(endDateText)
+                        if (startLong == null || endLong == null) {
+                            validationError = "Please enter valid dates (yyyy-MM-dd)"
+                            return@Button
+                        }
+                        viewModel.updateDateFilter("CUSTOM", startLong, endLong)
+                    } else {
+                        viewModel.updateDateFilter(selectedFilter, null, null)
+                    }
+                    onDismiss()
+                },
+                modifier = Modifier.testTag("apply_date_filter_btn")
+            ) {
+                Text("Apply Selection")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.DateRange, contentDescription = "Calendar", tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Time Selector System", style = MaterialTheme.typography.titleLarge)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Filter content chronologically. Newer information matches priority metrics.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                
+                val options = listOf(
+                    "ALL" to "Anytime",
+                    "TODAY" to "Today Only",
+                    "YESTERDAY" to "Yesterday",
+                    "LAST_7_DAYS" to "Last 7 Days",
+                    "LAST_30_DAYS" to "Last 30 Days",
+                    "THIS_MONTH" to "This Month",
+                    "THIS_YEAR" to "This Year",
+                    "CUSTOM" to "Custom Date Range"
+                )
+
+                options.forEach { (key, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selectedFilter == key) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f) else Color.Transparent)
+                            .clickable { selectedFilter = key }
+                            .padding(vertical = 8.dp, horizontal = 12.dp)
+                    ) {
+                        RadioButton(
+                            selected = selectedFilter == key,
+                            onClick = { selectedFilter = key }
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(text = label, fontWeight = if (selectedFilter == key) FontWeight.Bold else FontWeight.Normal, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                if (selectedFilter == "CUSTOM") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Format: yyyy-MM-dd", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedTextField(
+                            value = startDateText,
+                            onValueChange = { startDateText = it; validationError = null },
+                            label = { Text("Start Date") },
+                            placeholder = { Text("e.g. 2026-06-01") },
+                            modifier = Modifier.fillMaxWidth().testTag("custom_date_start_input"),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = endDateText,
+                            onValueChange = { endDateText = it; validationError = null },
+                            label = { Text("End Date") },
+                            placeholder = { Text("e.g. 2026-06-05") },
+                            modifier = Modifier.fillMaxWidth().testTag("custom_date_end_input"),
+                            singleLine = true
+                        )
+                        if (validationError != null) {
+                            Text(text = validationError!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+fun formatDate(millis: Long): String {
+    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+    return sdf.format(java.util.Date(millis))
+}
+
+fun parseDateText(text: String): Long? {
+    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+    return try {
+        sdf.parse(text)?.time
+    } catch (e: Exception) {
+        null
+    }
+}
+

@@ -32,16 +32,16 @@ import com.example.R
  * Single Configuration File for Dora Library Logo Assets and Placement.
  * 
  * Replace developer logos globally here:
- * 1. Icon-only logo: Replace the resource pointer below or overwritecom/example/R.drawable.dora_icon_fg_1780384782117
+ * 1. Icon-only logo: Replace the resource pointer below or overwrite com/example/R.drawable.img_app_logo_1780587892693
  * 2. Wordmark logo: If you have a physical png/jpeg file containing the full wordmark text logo,
  *    set [USE_PNG_FOR_WORDMARK] to true and update [LOGO_WORDMARK_IMAGE_RES].
  */
 object LogoConfig {
     // 1. Icon-only Logo Resource pointer
-    val LOGO_ICON_RES: Int = R.drawable.dora_icon_fg_1780384782117
+    val LOGO_ICON_RES: Int = R.drawable.img_app_logo_1780587892693
 
     // 2. Wordmark Logo Image Resource pointer (if a physical image containing "Dora Library + Icon" in one is provided later)
-    val LOGO_WORDMARK_IMAGE_RES: Int = R.drawable.dora_icon_fg_1780384782117 // Interchangeable pointer
+    val LOGO_WORDMARK_IMAGE_RES: Int = R.drawable.img_app_logo_1780587892693 // Interchangeable pointer
     
     // Toggle whether the wordmark layout uses the physical image asset or the premium animated/dynamic Compose layout.
     const val USE_PNG_FOR_WORDMARK: Boolean = false
