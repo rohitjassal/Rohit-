@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.api.RetrofitClient
 import com.example.data.firebase.FirebaseManager
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.example.data.local.AppDatabase
 import com.example.data.local.Bookmark
 import com.example.data.local.DoraPreferences
@@ -743,8 +745,12 @@ class DoraViewModel(
 
     // Sync current session with Firebase Auth and DB
     fun syncCurrentUserSession() {
-        if (!FirebaseManager.isInitialized) return
+        if (!FirebaseManager.isInitialized) {
+            Log.e("FirebaseAuthDebug", "syncCurrentUserSession aborted path: Firebase is not initialized yet.")
+            return
+        }
         val fbUser = FirebaseManager.auth.currentUser
+        Log.d("FirebaseAuthDebug", "In syncCurrentUserSession: firebase user = ${fbUser?.email}")
         if (fbUser != null) {
             viewModelScope.launch {
                 try {
@@ -753,6 +759,8 @@ class DoraViewModel(
                     val name = fbUser.displayName ?: "Explorer"
                     val photoUrl = fbUser.photoUrl?.toString()
                     val isGoogle = fbUser.providerData.any { it.providerId == "google.com" }
+
+                    Log.d("FirebaseAuthDebug", "Syncing details for active User $uid ($email)")
 
                     // Fetch details from RTDB (wrapped in its own safe timeout inside FirebaseManager)
                     val node = FirebaseManager.getUserNode(uid)
@@ -775,24 +783,36 @@ class DoraViewModel(
                     _currentUser.value = user
                     preferences.saveLoggedUser(user)
 
+                    Log.d("FirebaseAuthDebug", "Active session synced successfully to ViewModels. User node: $user")
+
                     // Sync historical aspects asynchronously in the background
                     syncSearchHistoryFromFirebase(uid)
                     syncBookmarksFromFirebase(uid)
                     syncSettingsFromFirebase(uid)
                 } catch (e: Exception) {
-                    Log.e("DoraViewModel", "Error syncing currentUserSession from Firebase", e)
+                    Log.e("FirebaseAuthDebug", "Error syncing currentUserSession details", e)
                 }
             }
         } else {
             val localUser = preferences.getLoggedUser()
-            if (localUser != null) {
-                // Keep the active user logged in on application restart
-                _currentUser.value = localUser
-                // Sync settings/bookmarks if it's a Google linked custom profile too
-                syncSearchHistoryFromFirebase(localUser.uid)
-                syncBookmarksFromFirebase(localUser.uid)
-                syncSettingsFromFirebase(localUser.uid)
+            Log.d("FirebaseAuthDebug", "Firebase auth is empty. Checking local preferences user: ${localUser?.email}")
+            if (localUser != null && localUser.isGoogleUser) {
+                // If it's a Google session, check if Google account is indeed present on current device
+                val googleAccount = GoogleSignIn.getLastSignedInAccount(getApplication<Application>())
+                if (googleAccount != null) {
+                    Log.d("FirebaseAuthDebug", "Google account active on device. Restoring local Google user preference session for ${localUser.email}")
+                    _currentUser.value = localUser
+                    syncSearchHistoryFromFirebase(localUser.uid)
+                    syncBookmarksFromFirebase(localUser.uid)
+                    syncSettingsFromFirebase(localUser.uid)
+                } else {
+                    Log.w("FirebaseAuthDebug", "Google session not found on current device. Logging out.")
+                    logout()
+                }
             } else {
+                Log.d("FirebaseAuthDebug", "No active user session. Showing login screen.")
+                // Make sure state is clean
+                preferences.clearLoggedUser()
                 _currentUser.value = null
             }
         }
@@ -873,7 +893,7 @@ class DoraViewModel(
     }
 
     // Firebase Email & Password Signup
-    fun signUpWithEmailAndPassword(email: String, name: String, pass: String) {
+    fun signUpWithEmailAndPassword(email: String, name: String, pass: String, confirmPass: String) {
         if (!FirebaseManager.isInitialized) {
             _authStateMessage.value = "Firebase is not initialized."
             return
@@ -892,20 +912,41 @@ class DoraViewModel(
                     return@launch
                 }
 
-                // Password strength validation (At least 6 characters, contain letters and digits)
+                // Password strength validation (At least 6 characters, contain digits, uppercase, lowercase and special chars)
                 if (pass.length < 6) {
                     _authStateMessage.value = "Password must be at least 6 characters long."
                     _authLoading.value = false
                     return@launch
                 }
-                if (!pass.any { it.isDigit() } || !pass.any { it.isLetter() }) {
-                    _authStateMessage.value = "Weak password: Must contain at least one letter and one number."
+                if (!pass.any { it.isDigit() }) {
+                    _authStateMessage.value = "Weak password: Must contain at least one number."
+                    _authLoading.value = false
+                    return@launch
+                }
+                if (!pass.any { it.isUpperCase() }) {
+                    _authStateMessage.value = "Weak password: Must contain at least one uppercase letter."
+                    _authLoading.value = false
+                    return@launch
+                }
+                if (!pass.any { it.isLowerCase() }) {
+                    _authStateMessage.value = "Weak password: Must contain at least one lowercase letter."
+                    _authLoading.value = false
+                    return@launch
+                }
+                val specialChars = "@#$%^&+=!_\\-*./?|()'\";:,<>`~"
+                if (!pass.any { it in specialChars }) {
+                    _authStateMessage.value = "Weak password: Must contain at least one special character (e.g., @, #, $, etc.)."
+                    _authLoading.value = false
+                    return@launch
+                }
+                if (pass != confirmPass) {
+                    _authStateMessage.value = "Passwords do not match."
                     _authLoading.value = false
                     return@launch
                 }
 
                 // Programmatic check: prevent duplicates (Firebase auth will throw collision on .await())
-                Log.d("DoraViewModel", "Starting email signup for user: $trimmedEmail")
+                Log.d("FirebaseAuthDebug", "Starting email signup for user: $trimmedEmail")
                 val authResult = withTimeoutOrNull(9000) {
                     FirebaseManager.auth.createUserWithEmailAndPassword(trimmedEmail, pass).await()
                 }
@@ -999,7 +1040,7 @@ class DoraViewModel(
                     return@launch
                 }
 
-                Log.d("DoraViewModel", "Starting email login for user: $trimmedEmail")
+                Log.d("FirebaseAuthDebug", "Starting email login for user: $trimmedEmail")
                 val authResult = withTimeoutOrNull(9000) {
                     FirebaseManager.auth.signInWithEmailAndPassword(trimmedEmail, pass).await()
                 }
@@ -1011,6 +1052,7 @@ class DoraViewModel(
                 val firebaseUser = authResult.user
                 if (firebaseUser != null) {
                     val uid = firebaseUser.uid
+                    Log.d("FirebaseAuthDebug", "Logged in successfully to Firebase Auth with UID: $uid")
                     val now = System.currentTimeMillis()
 
                     // Instantly login with fallback initial details to unlock the UI under 100ms
@@ -1141,6 +1183,8 @@ class DoraViewModel(
         _authStateMessage.value = null
         _authSuccess.value = false
 
+        Log.d("FirebaseAuthDebug", "loginWithGoogle triggered for Email=$email, Name=$name, PicUrl=$picUrl")
+
         viewModelScope.launch {
             try {
                 // Programmatically sync and restore google account under custom users/{uid} node
@@ -1158,12 +1202,13 @@ class DoraViewModel(
                     lastLogin = now
                 )
 
-                // Step 1: Direct instant UI login and user profile resolve to bypass Play Services lags
                 _currentUser.value = initialGoogleUser
                 preferences.saveLoggedUser(initialGoogleUser)
                 _authSuccess.value = true
                 _authStateMessage.value = "Connected via Google successfully!"
                 _authLoading.value = false
+
+                Log.d("FirebaseAuthDebug", "Step 1 complete: Google session is locally stored and UI session unlocked for $email.")
 
                 // Step 2: Fetch any custom profile history or updates from RTDB in the background
                 viewModelScope.launch {
@@ -1185,37 +1230,52 @@ class DoraViewModel(
                             )
                             _currentUser.value = syncedGoogleUser
                             preferences.saveLoggedUser(syncedGoogleUser)
+                            Log.d("FirebaseAuthDebug", "Restored existing user details for $email from RTDB.")
+                        } else {
+                            Log.d("FirebaseAuthDebug", "Creating brand new profile for $email in RTDB.")
                         }
                         // Write to remote database node to ensure the user profile is active and saved
                         val resolvedUserObj = _currentUser.value ?: initialGoogleUser
                         FirebaseManager.saveUserNode(resolvedUserObj)
-                        Log.d("DoraViewModel", "Successfully saved Google user node in database")
+                        Log.d("FirebaseAuthDebug", "Successfully saved Google user node in RTDB under users/$sanitizedUid.")
                     } catch (e: Exception) {
-                        Log.e("DoraViewModel", "Async Google login db sync failed", e)
+                        Log.e("FirebaseAuthDebug", "Async Google login DB sync failed", e)
                     }
                     syncCurrentUserSession()
                 }
             } catch (e: Exception) {
                 _authLoading.value = false
                 _authStateMessage.value = "Google Authentication encountered an error: ${e.localizedMessage}"
-                Log.e("DoraViewModel", "Google sign-in exception", e)
+                Log.e("FirebaseAuthDebug", "Google sign-in exception", e)
             }
         }
     }
 
     fun logout() {
+        Log.d("FirebaseAuthDebug", "Attempting full logout...")
         if (FirebaseManager.isInitialized) {
             try {
                 FirebaseManager.auth.signOut()
-                Log.d("DoraViewModel", "Successfully logged out from Firebase Auth")
+                Log.d("FirebaseAuthDebug", "Successfully logged out from Firebase Auth")
             } catch (e: Exception) {
-                Log.e("DoraViewModel", "Error signing out from Firebase Auth", e)
+                Log.e("FirebaseAuthDebug", "Error signing out from Firebase Auth", e)
             }
+        }
+        try {
+            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .build()
+            GoogleSignIn.getClient(getApplication<Application>(), gso).signOut().addOnCompleteListener {
+                Log.d("FirebaseAuthDebug", "Successfully logged out from Google Sign-In SDK client")
+            }
+        } catch (e: Exception) {
+            Log.e("FirebaseAuthDebug", "Error signing out from Google client", e)
         }
         preferences.clearLoggedUser()
         _currentUser.value = null
         _searchHistory.value = emptyList()
         clearLocalRoomBookmarks()
+        Log.d("FirebaseAuthDebug", "Full logout completed, sessions cleared.")
     }
 
     private fun clearLocalRoomBookmarks() {

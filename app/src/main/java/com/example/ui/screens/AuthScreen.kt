@@ -23,6 +23,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import android.util.Log
 import com.example.ui.viewmodel.DoraViewModel
 import com.example.ui.LogoConfig
 
@@ -33,11 +40,62 @@ fun AuthScreen(
     modifier: Modifier = Modifier
 ) {
     var isSignUp by remember { mutableStateOf(false) }
-    var email by remember { mutableStateOf("rohitjassal1929@gmail.com") }
-    var nickname by remember { mutableStateOf("Rohit Jassal") }
+    var email by remember { mutableStateOf("") }
+    var nickname by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
 
     var errorMessage by remember { mutableStateOf("") }
+
+    val context = LocalContext.current
+
+    // Configure Google Sign-In to open Account Picker and show device accounts
+    val gso = remember {
+        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestProfile()
+            .build()
+    }
+
+    val googleSignInClient = remember {
+        GoogleSignIn.getClient(context, gso)
+    }
+
+    // Standard Activity launcher for Google Account Picker
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            if (account != null) {
+                val chosenEmail = account.email ?: ""
+                val chosenName = account.displayName ?: "Google User"
+                val photoUrl = account.photoUrl?.toString() ?: "https://lh3.googleusercontent.com/a/default-user"
+
+                Log.d("FirebaseAuthDebug", "Google picker auth success. User selected: Email=$chosenEmail, Name=$chosenName")
+                viewModel.loginWithGoogle(
+                    email = chosenEmail,
+                    name = chosenName,
+                    picUrl = photoUrl
+                )
+            } else {
+                errorMessage = "Google accounts picker response was empty."
+                Log.e("FirebaseAuthDebug", "GoogleSignInAccount task was null")
+            }
+        } catch (e: ApiException) {
+            val statusMessage = when (e.statusCode) {
+                12501 -> "Google Sign-In was cancelled by the user."
+                12502 -> "Google Sign-In is already in progress."
+                else -> "Google accounts picker error: Code ${e.statusCode}"
+            }
+            errorMessage = statusMessage
+            Log.e("FirebaseAuthDebug", "Google Sign in failure code=${e.statusCode}", e)
+        } catch (e: Exception) {
+            errorMessage = "Google authentication failed: ${e.localizedMessage}"
+            Log.e("FirebaseAuthDebug", "Google Sign-InApiException", e)
+        }
+    }
 
     val authLoading by viewModel.authLoading.collectAsState()
     val authSuccess by viewModel.authSuccess.collectAsState()
@@ -204,6 +262,35 @@ fun AuthScreen(
                             .padding(bottom = 8.dp)
                     )
 
+                    // Confirm Password Input (visible only for SignUp)
+                    AnimatedVisibility(
+                        visible = isSignUp,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        OutlinedTextField(
+                            value = confirmPassword,
+                            onValueChange = {
+                                confirmPassword = it
+                                errorMessage = ""
+                            },
+                            label = { Text("Confirm Password Details") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "ConfirmPasswordIcon"
+                                )
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                                .testTag("confirm_password_input")
+                        )
+                    }
+
                     // Forgot Password link for logged-out emails
                     if (!isSignUp) {
                         Box(
@@ -235,19 +322,43 @@ fun AuthScreen(
                     // Get started / Continue button below
                     Button(
                         onClick = {
-                            if (email.isBlank() || password.isBlank() || (isSignUp && nickname.isBlank())) {
+                            val trimmedEmail = email.trim()
+                            if (trimmedEmail.isBlank() || password.isBlank() || (isSignUp && (nickname.isBlank() || confirmPassword.isBlank()))) {
                                 errorMessage = "Please fill in all requested fields."
                                 return@Button
                             }
-                            if (password.length < 6) {
-                                errorMessage = "Password must be at least 6 characters."
-                                return@Button
+                            if (isSignUp) {
+                                if (password.length < 6) {
+                                    errorMessage = "Password must be at least 6 characters long."
+                                    return@Button
+                                }
+                                if (!password.any { it.isDigit() }) {
+                                    errorMessage = "Weak password: Must contain at least one number."
+                                    return@Button
+                                }
+                                if (!password.any { it.isUpperCase() }) {
+                                    errorMessage = "Weak password: Must contain at least one uppercase letter."
+                                    return@Button
+                                }
+                                if (!password.any { it.isLowerCase() }) {
+                                    errorMessage = "Weak password: Must contain at least one lowercase letter."
+                                    return@Button
+                                }
+                                val specialChars = "@#$%^&+=!_\\-*./?|()'\";:,<>`~"
+                                if (!password.any { it in specialChars }) {
+                                    errorMessage = "Weak password: Must contain at least one special character (e.g., @, #, $, etc.)."
+                                    return@Button
+                                }
+                                if (password != confirmPassword) {
+                                    errorMessage = "Passwords do not match."
+                                    return@Button
+                                }
                             }
                             errorMessage = ""
                             if (isSignUp) {
-                                viewModel.signUpWithEmailAndPassword(email, nickname, password)
+                                viewModel.signUpWithEmailAndPassword(trimmedEmail, nickname, password, confirmPassword)
                             } else {
-                                viewModel.loginWithEmailAndPassword(email, password)
+                                viewModel.loginWithEmailAndPassword(trimmedEmail, password)
                             }
                         },
                         shape = RoundedCornerShape(14.dp),
@@ -300,15 +411,18 @@ fun AuthScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Simulated/Mocked Google Sign In Button - fully synced programmatically with DB Node
+                    // Google Sign In Button - shows Google accounts list on the device for authentication flow
                     OutlinedButton(
                         onClick = {
                             errorMessage = ""
-                            viewModel.loginWithGoogle(
-                                email = "rohitjassal1929@gmail.com",
-                                name = "Rohit Jassal",
-                                picUrl = "https://lh3.googleusercontent.com/a/default-user"
-                            )
+                            try {
+                                Log.d("FirebaseAuthDebug", "Continue with Google clicked. Launching Google accounts picker.")
+                                val signInIntent = googleSignInClient.signInIntent
+                                googleSignInLauncher.launch(signInIntent)
+                            } catch (e: Exception) {
+                                errorMessage = "Unable to start Google Sign In flow: ${e.localizedMessage}"
+                                Log.e("FirebaseAuthDebug", "Failed to launch google accounts picker launcher", e)
+                            }
                         },
                         shape = RoundedCornerShape(14.dp),
                         enabled = !authLoading,
